@@ -1,0 +1,6 @@
+praw
+pandas
+joblib
+smtplib
+logging
+scikit-learn
