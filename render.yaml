@@ -1,0 +1,6 @@
+services:
+  - type: background
+    name: notifier-bot
+    env: python
+    buildCommand: pip install -r requirements.txt  # This installs dependencies
+    startCommand: python notifier_bot.py  # This runs your bot script
