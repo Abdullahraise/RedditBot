@@ -6,8 +6,7 @@ import logging
 from email.mime.text import MIMEText
 from sklearn.feature_extraction.text import TfidfVectorizer
 from sklearn.naive_bayes import MultinomialNB
-from time import sleep, time
-import os
+from apscheduler.schedulers.blocking import BlockingScheduler
 
 # Configurations
 REDDIT_CLIENT_ID = 'cfynZYiP0bdEz5_Zw9Q1Ug'
@@ -17,6 +16,7 @@ EMAIL_ADDRESS = 'abdullahraise2004@gmail.com'
 EMAIL_PASSWORD = 'nusyvaeyxbomdhsb'
 RECIPIENT_EMAIL = 'raiseabdullah7@gmail.com'
 LOG_FILE = 'notifier_bot.log'
+SENT_POSTS_FILE = 'sent_posts.txt'  # File to store sent posts' URLs
 
 # Logging Configuration
 logging.basicConfig(level=logging.INFO, format='%(asctime)s - %(levelname)s - %(message)s', filename=LOG_FILE)
@@ -58,19 +58,7 @@ def classify_post(text, classifier, vectorizer):
     post_vectorized = vectorizer.transform([text])
     return classifier.predict(post_vectorized)[0]
 
-# Track sent post IDs to avoid duplicates
-def load_sent_post_ids():
-    if os.path.exists("sent_post_ids.txt"):
-        with open("sent_post_ids.txt", "r") as file:
-            return set(file.read().splitlines())
-    return set()
-
-def save_sent_post_ids(new_post_ids):
-    with open("sent_post_ids.txt", "a") as file:
-        for post_id in new_post_ids:
-            file.write(f"{post_id}\n")
-
-def send_email(subject, body):
+def send_email(subject, body, is_initial=False):
     """Sends an email notification with job posts digest."""
     try:
         msg = MIMEText(body)
@@ -85,80 +73,95 @@ def send_email(subject, body):
 
         # Log and print success message
         logging.info("Email sent successfully!")
-        print("Email sent successfully!")  # Display message in CMD
+        if is_initial:
+            print("Initial email sent successfully!")  # Confirmation for initial email
+        else:
+            print("Email sent successfully after 4 hours!")  # Confirmation after every 4 hours
 
     except Exception as e:
         logging.error(f"Error sending email: {e}")
         print(f"Error sending email: {e}")  # Display error in CMD
-
 
 def is_graphic_design_related(post_text):
     """Checks if the post is related to graphic design using relevant keywords."""
     post_text_lower = post_text.lower()
     return any(keyword in post_text_lower for keyword in GRAPHIC_DESIGN_KEYWORDS)
 
-def check_and_collect_posts(reddit, classifier, vectorizer, sent_post_ids):
+def check_and_collect_posts(reddit, classifier, vectorizer):
     """Fetches new Reddit posts, classifies them, and collects relevant posts."""
     relevant_posts = []
-    new_sent_post_ids = set()
 
     try:
         subreddit = reddit.subreddit('forhire')
         # Fetch maximum posts available on the subreddit
         for post in subreddit.new(limit=None):  # Set limit to None to fetch as many posts as possible
-            if post.id not in sent_post_ids and "[Hiring]" in post.title:
+            if "[Hiring]" in post.title:
                 post_text = f"{post.title} {post.selftext}"
                 
                 # Filter for relevance to graphic design
                 if is_graphic_design_related(post_text) and classify_post(post_text, classifier, vectorizer) == 'relevant':
                     relevant_posts.append({'title': post.title, 'url': post.url})
-                    new_sent_post_ids.add(post.id)
 
     except Exception as e:
         logging.error(f"Error checking Reddit posts: {e}")
 
-    sent_post_ids.update(new_sent_post_ids)
-    save_sent_post_ids(new_sent_post_ids)
-    
     return relevant_posts
 
-def send_digest_email(posts):
+def load_sent_posts():
+    """Loads the list of URLs of already sent posts."""
+    try:
+        with open(SENT_POSTS_FILE, 'r') as file:
+            sent_posts = file.read().splitlines()
+        return sent_posts
+    except FileNotFoundError:
+        return []  # Return empty list if file doesn't exist
+
+def save_sent_posts(sent_posts):
+    """Saves the URLs of the posts that have been sent."""
+    with open(SENT_POSTS_FILE, 'w') as file:
+        file.write("\n".join(sent_posts))
+
+def send_digest_email(posts, is_initial=False):
     """Sends a digest email of job posts collected."""
     if not posts:
         logging.info("No new relevant posts to send.")
         return
     
     body = "Here are the latest job posts that match your criteria:\n\n"
+    sent_posts = load_sent_posts()  # Load already sent posts to avoid duplicates
+    new_posts = []
+
     for post in posts:
-        body += f"Title: {post['title']}\nURL: {post['url']}\n\n"
-    print("Preparing to send email with job post updates...")  # Notify before sending email
-    send_email("Job Posts Digest", body)
+        if post['url'] not in sent_posts:  # Check if the post is already sent
+            body += f"Title: {post['title']}\nURL: {post['url']}\n\n"
+            new_posts.append(post['url'])
 
-# Main function to run the bot
-def main():
-    # Uncomment this line the first time to train the model     train_classifier()
+    if new_posts:
+        send_email("Job Posts Digest", body, is_initial)
+        sent_posts.extend(new_posts)  # Add the new posts to the sent list
+        save_sent_posts(sent_posts)  # Save the updated list of sent posts
 
+def scheduled_task():
+    """Runs the task every 4 hours."""
     classifier, vectorizer = load_classifier()
     reddit = praw.Reddit(client_id=REDDIT_CLIENT_ID,
                          client_secret=REDDIT_CLIENT_SECRET,
                          user_agent=REDDIT_USER_AGENT)
 
-    sent_post_ids = load_sent_post_ids()
-    
-    # Run the first check and send email immediately
-    relevant_posts = check_and_collect_posts(reddit, classifier, vectorizer, sent_post_ids)
-    send_digest_email(relevant_posts)
-    
-    while True:
-        start_time = time()
-        
-        # Run the job check and send emails every 2 minutes
-        relevant_posts = check_and_collect_posts(reddit, classifier, vectorizer, sent_post_ids)
-        send_digest_email(relevant_posts)
-        
-        # Calculate elapsed time and wait until 2 minutes have passed
-        elapsed = time() - start_time
-        sleep(max(0, 4 * 3600 - elapsed))
+    relevant_posts = check_and_collect_posts(reddit, classifier, vectorizer)
+    send_digest_email(relevant_posts, is_initial=False)
 
 if __name__ == "__main__":
-    main()
+    # Load the classifier and vectorizer immediately and send the email
+    classifier, vectorizer = load_classifier()
+    reddit = praw.Reddit(client_id=REDDIT_CLIENT_ID,
+                         client_secret=REDDIT_CLIENT_SECRET,
+                         user_agent=REDDIT_USER_AGENT)
+
+    relevant_posts = check_and_collect_posts(reddit, classifier, vectorizer)
+    send_digest_email(relevant_posts, is_initial=True)
+
+    # Scheduler to run the task every 4 hours
+    scheduler = BlockingScheduler()
+    scheduler.add_job(scheduled_task, 'interval', hours=4)  # Runs every 4 hours
+    scheduler.start()
