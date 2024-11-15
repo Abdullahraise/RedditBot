@@ -3,4 +3,4 @@ pandas
 joblib
 logging
 scikit-learn
-apschedulers
+apscheduler==3.9.1
