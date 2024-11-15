@@ -163,5 +163,5 @@ if __name__ == "__main__":
 
     # Scheduler to run the task every 4 hours
     scheduler = BlockingScheduler()
-    scheduler.add_job(scheduled_task, 'interval', minutes=15)  # Runs every 4 hours
+    scheduler.add_job(scheduled_task, 'interval', minutes=5)  # Runs every 4 hours
     scheduler.start()
