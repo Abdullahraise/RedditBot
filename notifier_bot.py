@@ -28,7 +28,7 @@ GRAPHIC_DESIGN_KEYWORDS = ["graphic design", "designer", "illustrator", "brandin
 def train_classifier():
     """Trains the job classifier based on labeled data."""
     try:
-        data = pd.read_csv('data/labeled_job_posts.csv')
+        data = pd.read_csv('labeled_job_posts.csv')
         X = data['text']
         y = data['label']
         vectorizer = TfidfVectorizer()
