@@ -16,7 +16,7 @@ REDDIT_CLIENT_SECRET = 'gVrmX4e8CuHxCmn_ux46Bipnjk74GA'
 REDDIT_USER_AGENT = 'JobNotifierBot'
 EMAIL_ADDRESS = 'abdullahraise2004@gmail.com'
 EMAIL_PASSWORD = 'nusyvaeyxbomdhsb'
-RECIPIENT_EMAIL = 'raiseabdullah7@gmail.com'
+RECIPIENT_EMAIL = 'abdulrahmansudhais02@gmail.com'
 LOG_FILE = 'notifier_bot.log'
 SENT_POSTS_FILE = 'sent_posts.txt'  # File to store sent posts' URLs
 
